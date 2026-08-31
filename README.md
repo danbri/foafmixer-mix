@@ -1,2 +1,3 @@
 # foafmixer-mix
-Apache-2.0 MIX core:1 and Openfire integration for Foafmixer
+
+Goal is to patch in XMPP MIX core:1 to one or more XMPP servers.
