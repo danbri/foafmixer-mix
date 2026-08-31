@@ -61,12 +61,16 @@ modules:
   mod_caps: {}
   mod_disco: {}
   # MIX uses PubSub and its local-participant support depends on MAM.
-  mod_mam: {}
+  mod_mam:
+    # MIX message publication flows through the MAM storage hook.
+    default: always
   mod_mix:
     hosts:
       - "mix.@HOST@"
   mod_mix_pam: {}
   mod_ping: {}
+  # Client-PAM joins create a roster item for the channel.
+  mod_roster: {}
   mod_pubsub:
     access_createnode: all
     plugins:
