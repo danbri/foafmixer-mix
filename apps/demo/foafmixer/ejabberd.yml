@@ -1,0 +1,74 @@
+### Loopback-only Foafmixer pilot configuration.
+###
+### MIX is intentionally enabled here (rather than substituting MUC).  This
+### pilot is not Internet-facing: `pilot.sh` binds the exposed ports to
+### 127.0.0.1, and its state is an isolated named Podman volume.
+
+hosts:
+  - "foafmixer.test"
+
+loglevel: warning
+
+# The browser pilot is served privately through Tailscale HTTPS on :8443.
+# Only that origin may open an XMPP WebSocket to this loopback-only listener.
+websocket_origin:
+  - "https://dans-macbook-air.tailaf2e8d.ts.net:8443"
+
+listen:
+  -
+    port: 5222
+    ip: "0.0.0.0"
+    module: ejabberd_c2s
+    starttls: false
+  -
+    port: 5280
+    ip: "0.0.0.0"
+    module: ejabberd_http
+    request_handlers:
+      "/api": mod_http_api
+  -
+    # Kept separate from the admin API so the browser's tailnet endpoint
+    # exposes XMPP WebSocket only.
+    port: 5281
+    ip: "0.0.0.0"
+    module: ejabberd_http
+    request_handlers:
+      "/xmpp": ejabberd_http_ws
+
+auth_method: internal
+
+acl:
+  admin:
+    user:
+      - "admin@foafmixer.test"
+
+access_rules:
+  configure:
+    allow: admin
+
+api_permissions:
+  "Foafmixer pilot admin":
+    who:
+      access:
+        allow:
+          acl: admin
+    what:
+      - "*"
+
+modules:
+  mod_adhoc: {}
+  mod_admin_extra: {}
+  mod_caps: {}
+  mod_disco: {}
+  # MIX uses PubSub and its local-participant support depends on MAM.
+  mod_mam: {}
+  mod_mix:
+    hosts:
+      - "mix.@HOST@"
+  mod_mix_pam: {}
+  mod_ping: {}
+  mod_pubsub:
+    access_createnode: all
+    plugins:
+      - "flat"
+      - "pep"
