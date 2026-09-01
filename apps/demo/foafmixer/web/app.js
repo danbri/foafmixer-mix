@@ -629,7 +629,19 @@ try {
     }
     $('jid').value = saved.jid;
     $('websocket-host').value = saved.websocketHost;
+    // The separate patched-test endpoint was retired after the patched server
+    // became the pilot.  Move pre-cutover browser sessions to the canonical
+    // WebSocket port instead of leaving the one-option select with no value.
+    saved.websocketPort = saved.websocketPort === '15281'
+      ? '8444'
+      : saved.websocketPort;
+    const savedPortIsAvailable = Array.from($('websocket-port').options)
+      .some((option) => option.value === saved.websocketPort);
+    if (!savedPortIsAvailable) {
+      saved.websocketPort = '8444';
+    }
     $('websocket-port').value = saved.websocketPort;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(saved));
     state.savedChannelJid = saved.channelJid || null;
     if (state.savedChannelJid) {
       const separator = state.savedChannelJid.indexOf('@');

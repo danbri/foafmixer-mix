@@ -19,39 +19,38 @@ client has incomplete MIX support.
 
 `ejabberd.yml` enables the experimental ejabberd MIX modules, MIX participant
 support, MAM and the PubSub support MIX needs. `pilot.sh` deliberately exports
-only XMPP client and HTTP API ports on `127.0.0.1`; it owns only the disposable
-container named `factoidal-foafmixer` and a separate
-`factoidal-foafmixer-state` volume. It never removes or reuses any older
-Podman container. Factoidal container tooling requires the caller's default
-Podman connection to be rootless. It never hard-codes a connection, socket,
-machine name, or host-platform assumption.
+only XMPP client and HTTP API ports on `127.0.0.1`; it owns only the replaceable
+container named `factoidal-foafmixer` and the persistent
+`foafmixer-mix-state` volume. Factoidal container tooling requires the caller's
+default Podman connection to be rootless. It never hard-codes a connection,
+socket, machine name, or host-platform assumption.
 
-Once `tools/foafmixer/podman-preflight.sh` reports that Podman is ready, start
-the pilot with a pilot-only password:
+Build the pinned patched image with the reviewer tooling in the separate GPL
+`ejabberd-xmpp-mix-patches` repository. Once `podman-preflight.sh` reports that
+Podman is ready, start the pilot:
 
 ```sh
-FOAFMIXER_ADMIN_PASSWORD='choose-a-pilot-only-password' \
-  tools/foafmixer/pilot.sh start
+apps/demo/foafmixer/pilot.sh start
 ```
 
 The pilot virtual host is `foafmixer.test`, with MIX service
 `mix.foafmixer.test`. The server comes up without creating public channels;
 create `factoidal` and `factoidal-shardborough` through a MIX-capable client
-or the documented XMPP stream calls, then record the channel/JID identities in
-the project worknotes. `tools/foafmixer/pilot.sh stop` removes only the pilot
+or the documented XMPP stream calls, then record the channel identities in
+the project worknotes. `apps/demo/foafmixer/pilot.sh stop` removes only the pilot
 container and intentionally retains its named state volume for a later local
 restart.
 
 Create named human test accounts with fresh temporary passwords:
 
 ```sh
-tools/foafmixer/human-account.sh human alice bob
+apps/demo/foafmixer/human-account.sh human alice bob
 ```
 
 Bots require an accountable human account that the helper has registered:
 
 ```sh
-tools/foafmixer/human-account.sh bot alice alicenotesbot alicebuildbot
+apps/demo/foafmixer/human-account.sh bot alice alicenotesbot alicebuildbot
 ```
 
 The helper records each account's kind and responsible human locally, never
@@ -59,9 +58,8 @@ stores passwords, and requires explicit names. Give each printed temporary
 password directly to its named human.
 
 This is a development pilot, not an Internet-exposed or production service.
-Tailscale may be used for private tailnet access after local client
-interoperability is confirmed. Do not add public DNS, federation, Funnel, or
-production credentials until the local lifecycle is tested.
+Tailscale supplies private tailnet access. Do not add public DNS, federation,
+Funnel, or production credentials without a separate deployment review.
 
 ## Browser pilot
 
@@ -71,7 +69,7 @@ server-side credential store: each human or accountable bot signs in with its
 own JID and password.
 
 ```sh
-tools/foafmixer/ui.sh start
+apps/demo/foafmixer/ui.sh start
 ```
 
 The script serves static files from its own loopback-only Podman container,

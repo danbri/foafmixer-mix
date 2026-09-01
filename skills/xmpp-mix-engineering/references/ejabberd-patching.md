@@ -40,7 +40,10 @@ Use the smallest test at each layer:
 - Full compile using the same pinned Erlang/OTP major version as the image.
 - Clean patch-application check against the parent commit.
 - Container build from `.github/container/Dockerfile`.
-- Isolated server with its own named database volume and ports.
+- Isolated server with its own named database volume and ports. Use the
+  account-free Docker/Podman reviewer workflow in the GPL patch repository;
+  never put pilot identities, JIDs, credentials, or database state in that
+  repository or image build context.
 - Authenticated raw client proof for PAM join, immediate sender echo, distinct
   recipient delivery, and MAM retrieval.
 - Wire assertion on the exact outgoing namespace.
@@ -51,7 +54,7 @@ Warnings about unavailable BEAM abstract code during coverage are not test
 failures by themselves; record the final EUnit result and separately require a
 clean production build.
 
-When replacing the isolated container, inspect its mount list and port bindings
-first. Reuse the named database volume and exact read-only configuration bind;
-never recreate the original pilot while testing a candidate image.
-
+When replacing an isolated container, inspect its mount list and port bindings
+first. Reuse only its intended named database volume and exact read-only
+configuration bind. Promote a tested image to the canonical pilot separately,
+then remove temporary routes so clients have one unambiguous endpoint.

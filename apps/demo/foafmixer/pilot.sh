@@ -7,8 +7,8 @@ set -euo pipefail
 
 pilot_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 container=factoidal-foafmixer
-image=ghcr.io/processone/ejabberd
-volume=factoidal-foafmixer-state
+image=${FOAFMIXER_IMAGE:-localhost/foafmixer/ejabberd-mix:26.07-pilot}
+volume=${FOAFMIXER_STATE_VOLUME:-foafmixer-mix-state}
 
 usage() {
   echo "usage: $0 {start|stop|status|logs}" >&2
@@ -25,14 +25,15 @@ require_rootless_podman() {
 
 case "${1:-}" in
   start)
-    : "${FOAFMIXER_ADMIN_PASSWORD:?set a non-empty pilot-only password in FOAFMIXER_ADMIN_PASSWORD}"
     require_rootless_podman
+    if ! podman image exists "$image"; then
+      echo "Patched MIX image not found: $image" >&2
+      echo "Build it with the reviewer tooling in ejabberd-xmpp-mix-patches first." >&2
+      exit 1
+    fi
     podman run -d --replace --name "$container" \
-      --label io.factoidal.purpose=foafmixer-mix-pilot \
-      -e "EJABBERD_MACRO_HOST=foafmixer.test" \
-      -e "EJABBERD_MACRO_ADMIN=admin@foafmixer.test" \
-      -e "REGISTER_ADMIN_PASSWORD=$FOAFMIXER_ADMIN_PASSWORD" \
-      -e "CTL_ON_START=status" \
+      --restart unless-stopped \
+      --label io.factoidal.purpose=foafmixer-mix-patched-pilot \
       -p 127.0.0.1:5222:5222 \
       -p 127.0.0.1:5280:5280 \
       -p 127.0.0.1:5281:5281 \
@@ -40,7 +41,8 @@ case "${1:-}" in
       -v "$volume:/opt/ejabberd/database" \
       "$image"
     echo "Foafmixer is starting on xmpp://127.0.0.1:5222 (host: foafmixer.test)."
-    echo "MIX service: mix.foafmixer.test; intended channels: factoidal and factoidal-shardborough."
+    echo "Browser WebSocket: http://127.0.0.1:5281/xmpp (put TLS in front of it)."
+    echo "Accounts and passwords live only in the named volume: $volume"
     ;;
   stop)
     require_rootless_podman

@@ -74,9 +74,17 @@ fragile even when the join result itself succeeds.
 - BeagleIM 6.0.1 has also crashed while repeatedly leaving/rejoining a channel;
   the macOS report showed a self-deadlock (`dispatch_sync` on the already-owned
   queue). Keep this client defect separate from server namespace defects.
+- BeagleIM can retain local conversation history across a server-container
+  replacement when the account and channel identities remain the same. Confirm
+  a current server session and a fresh live probe before attributing cached rows
+  to the active server.
+- Siskin IM can use native C2S through the Tailnet and has participated in a
+  successful browser-to-two-native-client live fan-out. Record its exact app
+  version before promoting that observation to versioned acceptance evidence.
+- OMEMO is not part of the Core 1 routing proof. Keep it disabled for baseline
+  tests, then test encryption separately across clients and device lists.
 - Multiple simultaneous resources for one bare JID can produce repeated PubSub
   events or apparent duplicates. Use distinct accounts and stable probe strings
   when measuring fan-out.
 - Mainstream XMPP clients often implement MUC but not MIX. Verify explicit MIX
   support rather than assuming a group-chat UI is sufficient.
-

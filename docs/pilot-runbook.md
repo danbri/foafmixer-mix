@@ -10,8 +10,8 @@ chat transcripts.
   `apps/demo/foafmixer`.
 * `danbri/ejabberd-xmpp-mix-patches` is the separate GPL repository for the
   ejabberd 26.07 patch series and upstream issue links.
-* The patched ejabberd test server is intentionally separate from the original
-  live pilot: it has a distinct container, database volume, and passwords.
+* The proven patched ejabberd server is now the live pilot. The retired
+  unpatched container is not part of the running topology.
 
 ## Endpoints
 
@@ -20,44 +20,39 @@ All names below are reachable only by devices authenticated to the tailnet.
 | Purpose | Address | Notes |
 | --- | --- | --- |
 | Browser demo | `https://dans-macbook-air.tailaf2e8d.ts.net:8443/` | HTTPS served through Tailscale |
-| Original-pilot WebSocket | `wss://dans-macbook-air.tailaf2e8d.ts.net:8444/` | The browser demo's default |
-| Patched-test WebSocket | `wss://dans-macbook-air.tailaf2e8d.ts.net:15281/` | Select **Patched MIX test — port 15281** in the UI |
-| Original-pilot C2S | `dans-macbook-air.tailaf2e8d.ts.net:5222` | raw TCP inside Tailscale; no direct TLS |
-| Patched-test C2S | `dans-macbook-air.tailaf2e8d.ts.net:15222` | raw TCP inside Tailscale; no direct TLS |
+| Browser WebSocket | `wss://dans-macbook-air.tailaf2e8d.ts.net:8444/xmpp` | TLS terminated by Tailscale, forwarded to patched ejabberd on loopback |
+| Desktop-client C2S | `dans-macbook-air.tailaf2e8d.ts.net:5222` | raw TCP only inside the encrypted tailnet; no direct TLS |
 
 The XMPP domain remains `foafmixer.test`; the Tailscale hostname is the
 network transport address, not the JID domain.
 
-## BeagleIM: patched-test account
+## BeagleIM
 
 In BeagleIM's full account form:
 
-* JID: `mix_patch_tester@foafmixer.test` (or patched-test `danbri`)
+* JID: an account in the `foafmixer.test` XMPP domain
 * Server: `dans-macbook-air.tailaf2e8d.ts.net`
-* Port: `15222`
+* Port: `5222`
 * **Use Direct TLS**: unchecked
 * **Disable TLS 1.3**: unchecked
 
 The traffic is plain XMPP only inside the encrypted tailnet link. The password
-is stored locally in macOS Keychain, not in this document. Retrieve it on the
-host only when needed:
-
-```sh
-security find-generic-password \
-  -s 'Foafmixer XMPP pilot (patched test)' \
-  -a 'mix_patch_tester@foafmixer.test' -w
-```
-
-Use a second account when testing a join from BeagleIM. Creating and joining a
-channel in the browser as the same account exercises direct MIX Core joins;
-joining it from `mix_patch_tester` exercises MIX Client-PAM and roster updates.
+is stored locally in macOS Keychain, not in this document. Use distinct
+accounts in BeagleIM and the browser when testing two-party delivery.
 
 ## Current test state
 
-* The patched test runs ejabberd 26.07 image
-  `localhost/ejabberd-mix-patched:26.07-core1` in container
-  `foafmixer-mix-patched-test`.
-* The original pilot remains isolated in `factoidal-foafmixer`.
+* The live `factoidal-foafmixer` container was created from the earlier local
+  tag `localhost/ejabberd-mix-patched:26.07-core1`. The pinned reviewer builder
+  now produces `localhost/foafmixer/ejabberd-mix:26.07-pilot`, which
+  `pilot.sh` will use on the next restart. SHA-256 checks of `mod_mix.beam` and
+  `mod_mix_pam.beam` match exactly between the running and newly built images,
+  so no client-disrupting restart was needed for this cutover.
+* It uses the canonical named volume `foafmixer-mix-state` and loopback ports
+  `5222`, `5280`, and `5281`.
+* The obsolete unpatched container and temporary Tailnet routes `15222` and
+  `15281` were removed on 2026-09-01. Its former named volume is retained
+  locally for deliberate recovery only; no volume data belongs in Git.
 * Core:1 create and direct join have been verified from the web UI.
 * The web demo now supplies the mandatory `id` on MIX group messages and waits
   for the server echo, avoiding a duplicate local message.
@@ -69,6 +64,9 @@ joining it from `mix_patch_tester` exercises MIX Client-PAM and roster updates.
 * The downstream 0001-0003 stack now emits Core 1 on live channel messages.
   BeagleIM 6.0.1 and the browser have rendered new messages immediately in both
   directions as distinct accounts, without reconnecting into history.
+* After promotion to ports 5222 and 8444, a fresh browser message appeared
+  immediately in both BeagleIM on macOS and Siskin IM on iOS. OMEMO was left
+  disabled so this proof isolates MIX routing from end-to-end encryption.
 * The `factoidal` channel archive was intentionally cleared after this proof on
   2026-09-01; accounts, participants, channel state, and MAM preferences were
   preserved.

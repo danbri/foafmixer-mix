@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Foafmixer</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231d7558'/%3E%3Cpath d='M16 18h32v8H24v8h20v8H24v12h-8z' fill='white'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/styles.css?v=20260901-tabs3">
+    <link rel="stylesheet" href="/styles.css?v=20260901-default-ports1">
     <script src="https://cdn.jsdelivr.net/npm/strophe.js/dist/strophe.umd.min.js"></script>
-    <script defer src="/app.js?v=20260901-tabs3"></script>
+    <script defer src="/app.js?v=20260901-default-ports1"></script>
   </head>
   <body>
     <main>
@@ -36,8 +36,7 @@
           <label>WebSocket server <input id="websocket-host" type="text" autocomplete="off" data-1p-ignore required></label>
           <label>WebSocket endpoint
             <select id="websocket-port" data-1p-ignore required>
-              <option value="8444">Live pilot — port 8444</option>
-              <option value="15281">Patched MIX test — port 15281</option>
+              <option value="8444">Foafmixer MIX — port 8444 (default)</option>
             </select>
           </label>
           <label class="session-option"><input id="remember-session" type="checkbox" data-1p-ignore checked> Remember connection details for 20 minutes (password is not saved)</label>

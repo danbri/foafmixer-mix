@@ -8,8 +8,10 @@ for non-secret operational details and update it when observations change.
 
 - `foafmixer.test` is the XMPP identity domain.
 - `dans-macbook-air.tailaf2e8d.ts.net` is the Tailnet transport host.
-- The browser UI is served over Tailscale HTTPS; its WebSocket selector chooses
-  the original or isolated patched ejabberd endpoint.
+- The browser UI is served through Tailscale HTTPS on port 8443 and reaches the
+  same patched server through WSS on port 8444.
+- Native clients such as BeagleIM and Siskin use Tailnet TCP port 5222. Port
+  8444 is WebSocket-only and must not be entered in a native client's C2S form.
 - Desktop C2S can remain plaintext only because the connection is confined to
   the encrypted tailnet. Do not describe it as Internet-safe TLS.
 - Tailscale on this Mac is managed by the macOS GUI; do not assume a daemon
@@ -17,13 +19,16 @@ for non-secret operational details and update it when observations change.
 
 ## Containers and durable state
 
-- `factoidal-foafmixer` is the original pilot.
-- `foafmixer-mix-patched-test` is the isolated patch target.
+- `factoidal-foafmixer` is the patched live pilot on the canonical ports.
 - `factoidal-foafmixer-ui` serves the browser demo.
+- `foafmixer-mix-state` is the canonical named database volume. Historical
+  named volumes may be retained for explicit recovery, but never copy them into
+  either Git repository or a container build context.
 
-Before replacement, inspect container health, image, port bindings, config bind,
-and named database volume. Preserve the patched-test volume and do not migrate
-demo accounts until the user explicitly asks.
+Before replacement, inspect container health, image, port bindings, config
+bind, and named database volume. The GPL patch repository contains a pinned,
+account-free Docker/Podman reviewer build; the live pilot supplies its own
+configuration and state outside that repository.
 
 ### Clearing one MIX channel's MAM history
 
@@ -88,3 +93,16 @@ cannot suppress those requests while keeping extension autofill. Mark unrelated
 WebSocket/channel/message controls with `data-1p-ignore`, but leave JID/password
 available to the password manager. Users can disable website icons in
 1Password's Appearance settings or filter that URL in DevTools if desired.
+
+## Current interoperability baseline
+
+A fresh browser submission has appeared immediately in both BeagleIM on macOS
+and Siskin IM on iOS through the canonical patched server. This proves live
+fan-out across the WebSocket and native C2S paths without a reconnect/history
+fallback. An old conversation remaining in Beagle after server replacement is
+local client cache when the channel identity is unchanged; do not treat it as
+evidence that the removed container is still reachable.
+
+OMEMO was disabled for the baseline. Treat end-to-end encryption as a separate
+client/device-state interoperability layer and test it only after unencrypted
+MIX routing remains deterministic.
