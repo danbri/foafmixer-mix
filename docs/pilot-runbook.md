@@ -54,7 +54,8 @@ joining it from `mix_patch_tester` exercises MIX Client-PAM and roster updates.
 
 ## Current test state
 
-* The patched test runs ejabberd 26.07 in container
+* The patched test runs ejabberd 26.07 image
+  `localhost/ejabberd-mix-patched:26.07-core1` in container
   `foafmixer-mix-patched-test`.
 * The original pilot remains isolated in `factoidal-foafmixer`.
 * Core:1 create and direct join have been verified from the web UI.
@@ -64,13 +65,19 @@ joining it from `mix_patch_tester` exercises MIX Client-PAM and roster updates.
   join timed out because the test configuration did not enable `mod_roster`.
   `mod_roster` is enabled.
 * MIX message handling passes through MAM, so the pilot sets
-  `mod_mam.default: always`. After enabling it, BeagleIM successfully loaded
-  existing `factoidal` history after rejoining. Live two-client delivery remains
-  the next explicit interoperability check.
+  `mod_mam.default: always`.
+* The downstream 0001-0003 stack now emits Core 1 on live channel messages.
+  BeagleIM 6.0.1 and the browser have rendered new messages immediately in both
+  directions as distinct accounts, without reconnecting into history.
+* The `factoidal` channel archive was intentionally cleared after this proof on
+  2026-09-01; accounts, participants, channel state, and MAM preferences were
+  preserved.
 
 ## Known limitations
 
 This is not yet a complete MIX implementation. The ejabberd patch addresses a
-specific Core:1 information-node gap and preserves the Client-PAM response
-namespace. Further work includes presence, subscription updates, channel
-configuration/administration, and conformance/interoperability tests.
+Core:1 information-node gap, participant-server live-routing namespace
+recognition, and Core 1 channel-message emission. Further work includes exact
+multi-resource fan-out, a no-mapping negative case, legacy Core 0 compatibility,
+presence, subscription updates, channel configuration/administration, and
+broader conformance/interoperability tests.
