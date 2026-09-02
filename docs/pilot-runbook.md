@@ -16,22 +16,32 @@ chat transcripts.
 ## Endpoints
 
 All names below are reachable only by devices authenticated to the tailnet.
+`<tailnet-hostname>` is this machine's Tailscale DNS name; `ui.sh start` and
+`pilot.sh expose` print it, and `tailscale status --json` reports it under
+`Self.DNSName`. It is deliberately not written into this repository.
 
-| Purpose | Address | Notes |
+| Purpose | Address | Created by |
 | --- | --- | --- |
-| Browser demo | `https://dans-macbook-air.tailaf2e8d.ts.net:8443/` | HTTPS served through Tailscale |
-| Browser WebSocket | `wss://dans-macbook-air.tailaf2e8d.ts.net:8444/xmpp` | TLS terminated by Tailscale, forwarded to patched ejabberd on loopback |
-| Desktop-client C2S | `dans-macbook-air.tailaf2e8d.ts.net:5222` | raw TCP only inside the encrypted tailnet; no direct TLS |
+| Browser demo | `https://<tailnet-hostname>:8443/` | `ui.sh start` (HTTPS served through Tailscale) |
+| Browser WebSocket | `wss://<tailnet-hostname>:8444/xmpp` | `ui.sh start` (TLS terminated by Tailscale, forwarded to ejabberd on loopback) |
+| Desktop-client C2S | `<tailnet-hostname>:5222` | `pilot.sh expose` (raw TCP inside the encrypted tailnet; no direct TLS) |
 
 The XMPP domain remains `foafmixer.test`; the Tailscale hostname is the
 network transport address, not the JID domain.
+
+`pilot.sh start` renders `ejabberd.yml` with `WS_ORIGIN` set to the tailnet
+HTTPS origin, so the server accepts WebSocket connections only from the
+browser demo. Rerun it after a tailnet rename, or set `FOAFMIXER_WS_ORIGIN`
+to override.
+
+Start order: `pilot.sh start`, then `ui.sh start`, then `pilot.sh expose`.
 
 ## BeagleIM
 
 In BeagleIM's full account form:
 
 * JID: an account in the `foafmixer.test` XMPP domain
-* Server: `dans-macbook-air.tailaf2e8d.ts.net`
+* Server: `<tailnet-hostname>`
 * Port: `5222`
 * **Use Direct TLS**: unchecked
 * **Disable TLS 1.3**: unchecked
@@ -40,7 +50,17 @@ The traffic is plain XMPP only inside the encrypted tailnet link. The password
 is stored locally in macOS Keychain, not in this document. Use distinct
 accounts in BeagleIM and the browser when testing two-party delivery.
 
-## Current test state
+## Test log
+
+### 2026-09-02
+
+* The pilot was restarted on the canonical image
+  `localhost/foafmixer/ejabberd-mix:26.07-pilot` with the rendered
+  configuration. The tailnet hostname no longer appears in Git; the 5222
+  forward is now created by `pilot.sh expose` instead of by hand.
+
+### 2026-09-01 and earlier
+
 
 * The live `factoidal-foafmixer` container was created from the earlier local
   tag `localhost/ejabberd-mix-patched:26.07-core1`. The pinned reviewer builder

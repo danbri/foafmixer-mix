@@ -1,1 +1,3 @@
 .foafmixer-account-responsibility.tsv
+.foafmixer-generated/
+.foafmixer-ui/

@@ -1,14 +1,10 @@
 # foafmixer
 
 `foafmixer` is the working home for Factoidal's future XMPP MIX bridge and
-agent/human social collaboration tools. It deliberately sits in `tools/` for
-now: it is operational glue around standard XMPP and is not yet part of the
-Lean SPARQL kernel.
-
-The later formal counterpart belongs under `formal/lean4/`, where it can model
-the SPARQL-over-MIX channel semantics, messages, artifact references and
-provenance claims without making the hot RDF block path depend on an XMPP
-client.
+agent/human social collaboration tools. It is operational glue around
+standard XMPP. It moved here from `tools/foafmixer` in the Factoidal
+repository on 2026-09-02; a formal counterpart for SPARQL-over-MIX channel
+semantics, if written, belongs in Factoidal's Lean 4 tree, not here.
 
 The initial operational target is a loopback-only ejabberd pilot using MIX
 channels `factoidal` and `factoidal-shardborough`. Git commits and dated
@@ -18,7 +14,9 @@ client has incomplete MIX support.
 ## Local pilot
 
 `ejabberd.yml` enables the experimental ejabberd MIX modules, MIX participant
-support, MAM and the PubSub support MIX needs. `pilot.sh` deliberately exports
+support, MAM and the PubSub support MIX needs. `pilot.sh start` renders it
+into `.foafmixer-generated/` with the WebSocket origin filled in, so no
+machine hostname is checked in. `pilot.sh` deliberately exports
 only XMPP client and HTTP API ports on `127.0.0.1`; it owns only the replaceable
 container named `factoidal-foafmixer` and the persistent
 `foafmixer-mix-state` volume. Factoidal container tooling requires the caller's
@@ -74,8 +72,12 @@ apps/demo/foafmixer/ui.sh start
 
 The script serves static files from its own loopback-only Podman container,
 prints the tailnet-only UI URL, and creates a separate WebSocket listener.
-`tools/foafmixer/ui.sh stop` removes only that UI container and those two
-listeners; it does not affect any other Tailscale Serve configuration.
+`ui.sh stop` removes only that UI container and those two listeners; it does
+not affect any other Tailscale Serve configuration.
+
+`pilot.sh expose` forwards tailnet TCP port 5222 to the loopback C2S listener
+for native clients; `pilot.sh unexpose` removes that forward. The full
+endpoint table is in [the pilot runbook](../../../docs/pilot-runbook.md).
 
 ## Historical context
 

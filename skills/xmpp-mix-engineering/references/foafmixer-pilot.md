@@ -7,10 +7,12 @@ for non-secret operational details and update it when observations change.
 ## Topology and identity
 
 - `foafmixer.test` is the XMPP identity domain.
-- `dans-macbook-air.tailaf2e8d.ts.net` is the Tailnet transport host.
+- The machine's Tailscale DNS name is the tailnet transport host. Scripts print
+  it; it is not recorded in Git.
 - The browser UI is served through Tailscale HTTPS on port 8443 and reaches the
   same patched server through WSS on port 8444.
-- Native clients such as BeagleIM and Siskin use Tailnet TCP port 5222. Port
+- Native clients such as BeagleIM and Siskin use Tailnet TCP port 5222, created
+  by `pilot.sh expose`. Port
   8444 is WebSocket-only and must not be entered in a native client's C2S form.
 - Desktop C2S can remain plaintext only because the connection is confined to
   the encrypted tailnet. Do not describe it as Internet-safe TLS.

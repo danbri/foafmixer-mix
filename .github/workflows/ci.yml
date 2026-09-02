@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    name: ShellCheck and browser-client syntax
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get install -y shellcheck
+      - run: shellcheck apps/demo/foafmixer/*.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check apps/demo/foafmixer/web/app.js
+      - name: No machine-specific tailnet hostname in the tree
+        run: |
+          if grep -rn 'ts\.net' --exclude-dir=.git . ; then
+            echo "tailnet hostnames must not be committed; scripts derive them at runtime"; exit 1
+          fi

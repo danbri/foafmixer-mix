@@ -2,7 +2,7 @@
 # Serve the Foafmixer browser pilot privately through this machine's tailnet.
 set -euo pipefail
 
-pilot_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+pilot_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 ui_dir="$pilot_dir/web"
 container=factoidal-foafmixer-ui
 http_port=8787
@@ -35,6 +35,7 @@ case "${1:-}" in
     dns_name=$(tailscale status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))')
     echo "Foafmixer UI: https://${dns_name}:${ui_port}/"
     echo "XMPP WebSocket: wss://${dns_name}:${websocket_port}/xmpp"
+    echo "The server accepts this origin only if pilot.sh start rendered it; rerun pilot.sh start after a tailnet rename."
     ;;
   stop)
     tailscale serve --https="$ui_port" off

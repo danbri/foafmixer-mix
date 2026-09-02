@@ -9,10 +9,15 @@ hosts:
 
 loglevel: warning
 
-# The browser pilot is served privately through Tailscale HTTPS on :8443.
-# Only that origin may open an XMPP WebSocket to this loopback-only listener.
+# Only the browser pilot's origin may open an XMPP WebSocket to this
+# loopback-only listener. `pilot.sh start` renders a copy of this file with
+# WS_ORIGIN set to the tailnet HTTPS origin that `ui.sh` serves; the default
+# below is for a plain local run without Tailscale.
+define_macro:
+  WS_ORIGIN: "https://localhost:8443"
+
 websocket_origin:
-  - "https://dans-macbook-air.tailaf2e8d.ts.net:8443"
+  - WS_ORIGIN
 
 listen:
   -

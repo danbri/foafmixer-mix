@@ -3,7 +3,7 @@
 # Passwords are generated per invocation and printed once for hand-off.
 set -euo pipefail
 
-pilot_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+pilot_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 container=factoidal-foafmixer
 domain=foafmixer.test
 registry=${FOAFMIXER_ACCOUNT_REGISTRY:-"$pilot_dir/.foafmixer-account-responsibility.tsv"}
