@@ -55,9 +55,21 @@ accounts in BeagleIM and the browser when testing two-party delivery.
 ### 2026-09-02
 
 * The pilot was restarted on the canonical image
-  `localhost/foafmixer/ejabberd-mix:26.07-pilot` with the rendered
-  configuration. The tailnet hostname no longer appears in Git; the 5222
-  forward is now created by `pilot.sh expose` instead of by hand.
+  `localhost/foafmixer/ejabberd-mix:26.07-pilot`, rebuilt from the revised
+  patch series (0001 now serves a fuller info form and allows discovery
+  reads), with the rendered configuration. Accounts, participants and the
+  `factoidal` channel were preserved.
+* The patch repository's `tools/mix-probe.py` passed all 9 checks against
+  the rebuilt pilot over loopback with a throwaway account and channel, both
+  removed afterwards. The WebSocket listener accepts the tailnet origin and
+  rejects a foreign origin.
+* The tailnet hostname no longer appears in Git; the 5222 forward is now
+  created by `pilot.sh expose` instead of by hand.
+* `human-account.sh audit` shows drift: `admin` and `mix_patch_tester` exist
+  on the server but not in the registry; four registry accounts (two humans,
+  two bots from the retired unpatched volume) do not exist on the server.
+  Left as is pending a decision.
+* Not yet re-run on this image: the BeagleIM join and info-node display.
 
 ### 2026-09-01 and earlier
 
