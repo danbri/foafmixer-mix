@@ -15,7 +15,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check apps/demo/foafmixer/web/app.js
+      - name: Syntax-check every browser-client module
+        run: |
+          status=0
+          while IFS= read -r f; do
+            node --input-type=module --check < "$f" || { echo "syntax error in $f"; status=1; }
+          done < <(find apps/demo/foafmixer/web/js -name '*.js' | sort)
+          exit $status
       - name: No machine-specific tailnet hostname in the tree
         run: |
           if grep -rn 'ts\.net' --exclude-dir=.git . ; then
