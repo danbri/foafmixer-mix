@@ -53,7 +53,9 @@ apps/demo/foafmixer/human-account.sh bot alice alicenotesbot alicebuildbot
 
 The helper records each account's kind and responsible human locally, never
 stores passwords, and requires explicit names. Give each printed temporary
-password directly to its named human.
+password directly to its named human. `human-account.sh audit` lists accounts
+that exist on the server but not in the registry, and the reverse, without
+changing either.
 
 This is a development pilot, not an Internet-exposed or production service.
 Tailscale supplies private tailnet access. Do not add public DNS, federation,

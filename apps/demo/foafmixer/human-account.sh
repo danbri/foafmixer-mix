@@ -11,9 +11,26 @@ registry=${FOAFMIXER_ACCOUNT_REGISTRY:-"$pilot_dir/.foafmixer-account-responsibi
 usage() {
   echo "usage: $0 human <localpart> [<localpart> ...]" >&2
   echo "       $0 bot <responsible-human> <bot-localpart> [<bot-localpart> ...]" >&2
+  echo "       $0 audit" >&2
   echo "examples: $0 human alice bob" >&2
   echo "          $0 bot alice alicenotesbot alicebuildbot" >&2
 }
+
+if [ "${1:-}" = audit ]; then
+  # Report drift between the server's account list and the local registry.
+  # Read-only: it changes neither accounts nor the registry.
+  if ! podman container exists "$container"; then
+    echo "Foafmixer pilot container is not running: $container" >&2
+    exit 1
+  fi
+  server=$(podman exec "$container" ejabberdctl registered_users "$domain" | sed "s/\$/@$domain/" | sort)
+  registered=$(tail -n +2 "$registry" 2>/dev/null | cut -f1 | sort || true)
+  echo "On server, not in registry:"
+  comm -23 <(printf '%s\n' "$server") <(printf '%s\n' "$registered") | sed 's/^/  /'
+  echo "In registry, not on server:"
+  comm -13 <(printf '%s\n' "$server") <(printf '%s\n' "$registered") | sed 's/^/  /'
+  exit 0
+fi
 
 if [ "$#" -lt 2 ]; then
   usage
