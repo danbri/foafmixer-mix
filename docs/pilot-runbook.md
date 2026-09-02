@@ -70,6 +70,12 @@ accounts in BeagleIM and the browser when testing two-party delivery.
   two bots from the retired unpatched volume) do not exist on the server.
   Left as is pending a decision.
 * Not yet re-run on this image: the BeagleIM join and info-node display.
+* The browser client was replaced by the web-components rewrite described
+  in [ux-redesign.md](ux-redesign.md): one timeline per channel with
+  history merged, a channel list, Enter sends, details panel, mobile
+  two-view layout, light and dark themes. The previous tabbed client is in
+  Git history before this date. Verified live with a throwaway account and
+  channel, both removed afterwards.
 
 ### 2026-09-01 and earlier
 

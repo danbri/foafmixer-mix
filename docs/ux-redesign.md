@@ -1,8 +1,30 @@
 # Foafmixer browser client: UX redesign specification
 
-Status: specification for the `web/` rewrite, 2026-09-02. The survey that
-informs it is in [ux-survey.md](ux-survey.md). Open protocol topics that the
-survey raised are in [xmpp-mainstream-gaps.md](xmpp-mainstream-gaps.md).
+Status: landed in `web/` on 2026-09-02 and serving the pilot. The survey
+that informs it is in [ux-survey.md](ux-survey.md). Open protocol topics
+that the survey raised are in [xmpp-mainstream-gaps.md](xmpp-mainstream-gaps.md).
+
+Deviations from this specification in the landed code, each deliberate:
+
+- `js/dom.js` exists as a shared helper module (element builder, safe
+  linkify, initials and avatar hue, dialog focus helpers).
+- The light focus colour is `#ad7d0a`, because the specified value measured
+  2.99:1 on the light page. Ratios are listed at the top of `styles.css`.
+- The header avatar strip is hidden below 48rem; name, count and the
+  Details control do not fit at 360 px.
+- Remembered channels re-join automatically on sign-in instead of waiting
+  for a manual Join.
+- The client acknowledges the server's roster push after a PAM join with an
+  IQ result, which the specification did not mention.
+- The server echo is matched to the pending row by the MIX submission-id,
+  not by stanza id; the channel assigns a new id to the reflected message.
+
+Live verification on 2026-09-02 against the pilot: sign in, session restore
+without password, create-then-join, echo replacing the pending row, MAM
+merge on rejoin, details panel with info-node Name and Contact, leave,
+mobile two-view stack at 360 px with no horizontal scroll, dark theme,
+developer log with IN and OUT stanzas. Not yet checked: BeagleIM on the
+other side of a live exchange with this client.
 
 ## Goal
 

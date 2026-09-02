@@ -63,7 +63,9 @@ Funnel, or production credentials without a separate deployment review.
 
 ## Browser pilot
 
-`ui.sh` serves a small same-origin Strophe browser client privately over
+`ui.sh` serves a same-origin Strophe browser client, written as vanilla web
+components with no build step (see `web/` and
+[the redesign specification](../../../docs/ux-redesign.md)), privately over
 Tailscale HTTPS. It connects to ejabberd using XMPP-over-WebSocket and has no
 server-side credential store: each human or accountable bot signs in with its
 own JID and password.

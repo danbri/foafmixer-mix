@@ -4,97 +4,17 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Foafmixer</title>
+    <meta name="color-scheme" content="light dark">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231d7558'/%3E%3Cpath d='M16 18h32v8H24v8h20v8H24v12h-8z' fill='white'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/styles.css?v=20260901-default-ports1">
+    <link rel="stylesheet" href="styles.css?v=20260902-5">
     <script src="https://cdn.jsdelivr.net/npm/strophe.js/dist/strophe.umd.min.js"></script>
-    <script defer src="/app.js?v=20260901-default-ports1"></script>
+    <script type="module" src="js/app.js?v=20260902-5"></script>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>Foafmixer</h1>
-        <p>Private XMPP MIX pilot · human accounts and accountable bots</p>
-      </header>
-
-      <div class="live-state card" aria-label="Current XMPP state">
-        <p id="server-state" role="status">❌ Connected to server</p>
-        <p id="joined-state" role="status">❌ Joined channels: none</p>
-      </div>
-
-      <nav class="tabs primary-tabs" role="tablist" aria-label="Foafmixer sections">
-        <button id="server-tab" class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="server-panel">Server</button>
-        <button id="channel-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="channel-panel" tabindex="-1">Channel</button>
-        <button id="messages-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="messages-panel" tabindex="-1">Messages</button>
-        <button id="debug-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="debug-panel" tabindex="-1">Debug</button>
-      </nav>
-
-      <section class="card tab-panel" id="server-panel" role="tabpanel" aria-labelledby="server-tab">
-        <h2>Sign in</h2>
-        <form id="login-form">
-          <label>JID <input id="jid" type="text" autocomplete="username" placeholder="alice@foafmixer.test" autofocus required></label>
-          <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
-          <label>WebSocket server <input id="websocket-host" type="text" autocomplete="off" data-1p-ignore required></label>
-          <label>WebSocket endpoint
-            <select id="websocket-port" data-1p-ignore required>
-              <option value="8444">Foafmixer MIX — port 8444 (default)</option>
-            </select>
-          </label>
-          <label class="session-option"><input id="remember-session" type="checkbox" data-1p-ignore checked> Remember connection details for 20 minutes (password is not saved)</label>
-          <button type="submit">Connect</button>
-          <button id="disconnect" type="button" disabled>Disconnect</button>
-        </form>
-        <p id="connection-status" role="status">Disconnected</p>
-      </section>
-
-      <section class="card tab-panel" id="channel-panel" role="tabpanel" aria-labelledby="channel-tab" hidden>
-        <h2>MIX channel</h2>
-        <div class="controls">
-          <label>Service <input id="service" type="text" value="mix.foafmixer.test" data-1p-ignore></label>
-          <label>Channel <input id="channel" type="text" value="factoidal" data-1p-ignore></label>
-          <label>Nick <input id="nick" type="text" placeholder="Set after sign-in" data-1p-ignore></label>
-          <button id="create-channel" type="button" disabled>Create</button>
-          <button id="join-channel" type="button" disabled>Join</button>
-        </div>
-        <p id="channel-status">Connect, then create or join a channel.</p>
-      </section>
-
-      <section class="card tab-panel" id="messages-panel" role="tabpanel" aria-labelledby="messages-tab" hidden>
-        <h2 id="chat-title">Messages</h2>
-        <nav class="tabs secondary-tabs" role="tablist" aria-label="Channel messages">
-          <button id="live-tab" class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="live-panel">Live</button>
-          <button id="history-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="history-panel" tabindex="-1">History</button>
-        </nav>
-
-        <div id="live-panel" class="subtab-panel" role="tabpanel" aria-labelledby="live-tab">
-          <p id="messages-empty" class="empty-state">No live messages received in this session.</p>
-          <ol id="messages" class="message-list" aria-live="polite"></ol>
-          <form id="message-form">
-            <label class="sr-only" for="message">Message</label>
-            <textarea id="message" rows="3" placeholder="Connect and choose a channel" aria-describedby="message-shortcut" data-1p-ignore disabled></textarea>
-            <span id="message-shortcut" class="shortcut-hint">Send with ⌘↵ or Ctrl+↵; Enter adds a new line.</span>
-            <button id="send" type="submit" disabled>Send</button>
-          </form>
-        </div>
-
-        <div id="history-panel" class="subtab-panel" role="tabpanel" aria-labelledby="history-tab" hidden>
-          <div class="panel-toolbar">
-            <p id="history-status" role="status">Join a channel to load its server history.</p>
-            <button id="refresh-history" type="button" disabled>Refresh history</button>
-          </div>
-          <p id="history-empty" class="empty-state">No history loaded.</p>
-          <ol id="history-messages" class="message-list" aria-live="polite"></ol>
-        </div>
-      </section>
-
-      <section class="card tab-panel" id="debug-panel" role="tabpanel" aria-labelledby="debug-tab" hidden>
-        <div class="panel-toolbar">
-          <h2>Protocol log</h2>
-          <button id="copy-protocol-log" type="button" aria-label="Copy protocol log to clipboard">📋 Copy log</button>
-        </div>
-        <p class="debug-caution">Protocol logs can contain authentication exchanges. Review them before sharing.</p>
-        <p id="copy-status" class="copy-status" role="status"></p>
-        <div id="protocol-log" class="protocol-log" role="log" aria-live="off"></div>
-      </section>
-    </main>
+    <a class="skip-link" href="#composer-input">Skip to the message box</a>
+    <fm-app></fm-app>
+    <noscript>
+      <p class="noscript">Foafmixer needs JavaScript to talk to the XMPP server.</p>
+    </noscript>
   </body>
 </html>
