@@ -23,14 +23,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { summary, labelSearch, graphCounts, crossGraphMatches, killActiveQueries } from './skos-query.mjs';
-
-// A killed/crashed skosbot otherwise leaves its in-flight `factoidal query`
-// child running indefinitely -- orphaned processes don't die with the
-// parent on Unix. Each of these costs tens of seconds of real CPU.
-for (const sig of ['SIGTERM', 'SIGINT']) {
-  process.on(sig, () => { killActiveQueries(); process.exit(0); });
-}
+import { open as openStore, summary, labelSearch, graphCounts, crossGraphMatches } from './skos-query.mjs';
 
 const HOST = process.env.TALKIE_HOST || '127.0.0.1';
 const PORT = Number(process.env.TALKIE_PORT || '5222');
@@ -159,31 +152,31 @@ const HELP = [
   '  help              this text',
 ].join('\n');
 
-async function skosReply(rawText) {
+function skosReply(rawText) {
   const text = rawText.trim();
   if (/^help$/i.test(text)) return HELP;
   if (/^about$/i.test(text)) {
-    const { graphs, labels } = await summary(STORE);
+    const { graphs, labels } = summary();
     return `${graphs} vocabularies, ${labels} preferred labels, at ${STORE}`;
   }
 
   const vocabsMatch = /^vocabs\s+(.+)$/i.exec(text);
   if (vocabsMatch) {
-    const rows = await graphCounts(STORE, vocabsMatch[1], MAX_ROWS);
+    const rows = graphCounts(vocabsMatch[1], MAX_ROWS);
     if (rows.length === 0) return `no vocabulary mentions "${vocabsMatch[1]}"`;
     return rows.map((r) => `${vocabularyOf(r.g)}: ${r.n}`).join('\n');
   }
 
   const mapMatch = /^map\s+(.+)$/i.exec(text);
   if (mapMatch) {
-    const rows = await crossGraphMatches(STORE, mapMatch[1], MAX_ROWS);
+    const rows = crossGraphMatches(mapMatch[1], MAX_ROWS);
     if (rows.length === 0) return `no cross-vocabulary match for "${mapMatch[1]}"`;
     return rows
       .map((r) => `"${r.label}" (${vocabularyOf(r.from)}) → "${r.targetLabel}" [${vocabularyOf(r.to)}]\n  ${r.target}`)
       .join('\n');
   }
 
-  const rows = await labelSearch(STORE, text, MAX_ROWS);
+  const rows = labelSearch(text, MAX_ROWS);
   if (rows.length === 0) return `nothing found for "${text}"`;
   return rows.map((r) => `${vocabularyOf(r.g)}: "${r.label}"\n  ${r.c}`).join('\n');
 }
@@ -218,6 +211,13 @@ async function main() {
   const service = `mix.${domain}`;
   const channel = `${CHANNEL_NAME}@${service}`;
   const knownBotJids = loadKnownBotJids(bareJid);
+
+  // Opening the handle costs ~2.5-3.5s, one time; every query after that
+  // is ~150-500ms (was 25-48s per query, unconditionally, before
+  // @factoidal/core 0.5.1 -- see danbri/factoidal#654). Kicked off
+  // alongside the XMPP connection rather than before it, then awaited
+  // just before it's actually needed.
+  const storeReady = openStore(STORE);
 
   const stream = new XmppStream(HOST, PORT);
   console.log(`[skosbot] connecting as ${bareJid} to ${HOST}:${PORT}`);
@@ -257,6 +257,8 @@ async function main() {
   if (REQUIRE_ADDRESS) {
     console.log(`[skosbot] reply-only-when-addressed mode: will only answer messages mentioning '${NICK}'`);
   }
+  await storeReady;
+  console.log(`[skosbot] store handle open: ${STORE}`);
 
   const escapedNick = NICK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const addressRe = new RegExp(`\\b${escapedNick}\\b`, 'i');
@@ -266,16 +268,6 @@ async function main() {
   let replyTimes = [];
   const RATE_LIMIT_COUNT = 5;
   const RATE_LIMIT_WINDOW = 30000;
-
-  // Every query costs ~35-48s of CPU regardless of result count (an
-  // @factoidal/core 0.4.0 engine characteristic, not something fixable
-  // here -- see the repo's notes on issue #650). Two mitigations that ARE
-  // ours to make: cache answers so a repeated query is instant, and run
-  // queries one at a time so several incoming messages don't stack up
-  // multiple 35s CPU-bound `factoidal` subprocesses on an already
-  // resource-tight machine.
-  const queryCache = new Map();
-  let queryQueue = Promise.resolve();
 
   const bootstrapMarkerRe = /^__talkie_bootstrap_[0-9a-f]+__$/;
   const bootstrapMarker = `__talkie_bootstrap_${randomUUID().replace(/-/g, '')}__`;
@@ -356,36 +348,21 @@ async function main() {
         }
 
         const query = (stripPrefixRe.test(body) ? body.replace(stripPrefixRe, '') : body).trim();
-        const cacheKey = (query || body).toLowerCase();
-        const sendReply = (reply) => {
-          console.log(`[skosbot] -> ${reply}`);
-          const msgId = `skosbot-${Date.now()}`;
-          sentIds.add(msgId);
-          replyTimes.push(Date.now());
-          stream.send(
-            `<message to='${channel}' type='groupchat' id='${msgId}'>`
-            + `<body>${xmlEscape(reply)}</body></message>`,
-          );
-        };
-
-        if (queryCache.has(cacheKey)) {
-          sendReply(queryCache.get(cacheKey));
-        } else {
-          // Chained onto the queue rather than fired standalone, so a burst
-          // of messages queries the (slow) store one at a time.
-          queryQueue = queryQueue.then(async () => {
-            sendReply(`(one moment -- querying ${STORE.split('/').pop()} ...)`);
-            let reply;
-            try {
-              reply = await skosReply(query || body);
-              queryCache.set(cacheKey, reply);
-            } catch (exc) {
-              console.error(`[skosbot] query error: ${exc.message}`);
-              reply = `query failed: ${exc.message.split('\n')[0]}`;
-            }
-            sendReply(reply);
-          });
+        let reply;
+        try {
+          reply = skosReply(query || body);
+        } catch (exc) {
+          console.error(`[skosbot] query error: ${exc.message}`);
+          reply = `query failed: ${exc.message.split('\n')[0]}`;
         }
+        console.log(`[skosbot] -> ${reply}`);
+        const msgId = `skosbot-${Date.now()}`;
+        sentIds.add(msgId);
+        replyTimes.push(now);
+        stream.send(
+          `<message to='${channel}' type='groupchat' id='${msgId}'>`
+          + `<body>${xmlEscape(reply)}</body></message>`,
+        );
       }
 
       if (lastEnd > 0) {

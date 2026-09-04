@@ -1,64 +1,80 @@
-// Query a Shardborough store with SPARQL, from any Node script.
+// Query a Shardborough store with SPARQL, holding the store open.
 //
-//   npm install @factoidal/core
+//   npm install @factoidal/core@0.5.1
 //
-// The engine reads CURRENT, picks the artifacts the query needs from the
-// manifest, and verifies each against its committed SHA-256 before it
-// answers. Nothing here parses RDF or chooses a block.
+// THE POINT OF THIS FILE
+// `storeQuery` is stateless: it re-reads, re-verifies and re-decodes the
+// block on every call, about 1.5 to 2 s each time. A HANDLE pays that
+// once. Measured on factoidal-skosgraphs, 141 graphs, 45,806 labels:
 //
-// It spawns the `factoidal` command because @factoidal/core 0.4.0 exports
-// `store-host` (file I/O) but not the store query driver. When 0.5.0 adds
-// that export, `sparql()` below is the only function that changes.
+//   open the handle          2,392 ms   once, at startup
+//   any search after that      142-214 ms
+//
+// So a long-lived process (a chat bot, an MCP server) must open once and
+// keep the handle. A process that spawns per question gets no benefit.
+//
+// WHAT A HANDLE DOES NOT DO
+// `CONTAINS` still scans every row, so cost stays proportional to the
+// store's size and a search matching nothing costs the same as one
+// matching everything. There is no inverted index.
 
-import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
+import { openStore, openStoreHandle } from '@factoidal/core/store'
+import { loadEngine } from '@factoidal/core/engine'
 
-const require = createRequire(import.meta.url)
+const SKOS = 'PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n'
+const RDFS = 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n'
 
-const CLI = require
-  .resolve('@factoidal/core/package.json')
-  .replace(/package\.json$/, 'bin/factoidal.mjs')
+// The shape the handle is opened for. A handle over the WHOLE store is
+// refused -- 119 artifacts against a cap of 64 -- so it is scoped to the
+// blocks these queries need. Each predicate below is its own GROUP,
+// UNIONed with the others -- UNION joins GROUPS, not patterns, and
+// getting that wrong is a parse error, not a slow query (ask how we know).
+//
+// To query another predicate, add it here the same way: another
+// `{ GRAPH ?g { ... } }` branch UNIONed in.
+const SCOPE = SKOS + RDFS + 'SELECT ?c ?l WHERE { '
+  + '{ GRAPH ?g { ?c skos:prefLabel ?l } } UNION '
+  + '{ GRAPH ?g { ?c skos:exactMatch ?l } } UNION '
+  + '{ GRAPH ?g { ?c rdfs:label ?l } } '
+  + '}'
 
-// Each query costs real, sustained CPU (tens of seconds, independent of
-// result count -- an @factoidal/core 0.4.0 engine characteristic). Killing
-// the caller does NOT kill an in-flight spawned child on its own -- Unix
-// doesn't propagate a kill to children, so it's orphaned and keeps burning
-// CPU. Track every child here so a caller can clean up on exit.
-const activeChildren = new Set()
-
-/** Kill every query subprocess still running. Call from a shutdown handler. */
-export function killActiveQueries () {
-  for (const child of activeChildren) child.kill('SIGTERM')
-}
+let engine = null
+let handle = null
+let openedPath = null
 
 /**
- * Run one SPARQL query against a store.
+ * Open the store once and keep it. Safe to call repeatedly; it opens on
+ * the first call and returns the same handle afterwards.
  *
- * @param {string} store  the collection root — the directory holding CURRENT
- * @param {string} query  SPARQL text
- * @returns {Promise<object>} SPARQL 1.1 Query Results JSON
+ * @param {string} storePath the collection root — the directory with CURRENT
  */
-export function sparql (store, query) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath,
-      [CLI, 'query', store, '--query', query, '--format', 'json', '--quiet'],
-      { stdio: ['ignore', 'pipe', 'pipe'] })
-    activeChildren.add(child)
-    let out = ''
-    let err = ''
-    child.stdout.on('data', (d) => { out += d })
-    child.stderr.on('data', (d) => { err += d })
-    child.on('close', (code) => {
-      activeChildren.delete(child)
-      if (code !== 0) return reject(new Error(err.trim() || `exit ${code}`))
-      try { resolve(JSON.parse(out)) } catch (e) { reject(e) }
-    })
-  })
+export async function open (storePath) {
+  if (handle !== null && openedPath === storePath) return handle
+  if (handle !== null) { handle.close(); handle = null }
+  if (engine === null) engine = await loadEngine()
+  const store = openStore(storePath, null)
+  handle = openStoreHandle(engine, store, { sparql: SCOPE })
+  openedPath = storePath
+  return handle
 }
 
-/** The same, flattened to plain objects: one per row, variable → string. */
-export async function rows (store, query) {
-  const srj = await sparql(store, query)
+/** Release the store. The process can exit without this; a long-lived
+ *  server should call it when it drops a store. */
+export function close () {
+  if (handle !== null) { handle.close(); handle = null; openedPath = null }
+}
+
+/** Run one SPARQL query. `open` must have been called. */
+export function sparql (query) {
+  if (handle === null) throw new Error('call open(storePath) first')
+  const answer = handle.query(query)
+  return answer.result ?? answer
+}
+
+/** The same, flattened: one plain object per row, variable -> string. */
+export function rows (query) {
+  const result = sparql(query)
+  const srj = result.srj ?? result
   return srj.results.bindings.map((b) => {
     const row = {}
     for (const name of srj.head.vars) row[name] = b[name]?.value ?? null
@@ -73,28 +89,19 @@ export function literal (text) {
     .replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '"'
 }
 
-// ------------------------------------------------------------------------
-// TWO CAPS THAT DECIDE HOW YOU WRITE QUERIES
+// ---------------------------------------------------------------- queries
 //
-// The store query operation refuses a plan above 64 artifacts, 8,388,608
-// bytes, or 100,000 rows. It says which cap and by how much.
+// BIND A PREDICATE in every triple pattern. An unbound predicate makes
+// the plan open every block in the manifest and the engine refuses it.
 //
-// In practice that means: BIND A PREDICATE in every triple pattern. An
-// unbound predicate makes the plan open every block in the manifest.
-//
-//   ✅  GRAPH ?g { ?c skos:prefLabel ?label }      one block
-//   ❌  GRAPH ?g { ?s ?p ?o }                       every block, refused
+//   ✅  GRAPH ?g { ?c skos:prefLabel ?l }
+//   ❌  GRAPH ?g { ?s ?p ?o }
 //
 // A cross-graph join needs a bound predicate on BOTH sides.
-// https://github.com/danbri/factoidal/issues/648
-// ------------------------------------------------------------------------
-
-const SKOS = 'PREFIX skos: <http://www.w3.org/2004/02/skos/core#>\n'
-const RDFS = 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n'
 
 /** Concepts whose prefLabel contains `term`, with the graph each is in. */
-export function labelSearch (store, term, limit = 8) {
-  return rows(store, `${SKOS}
+export function labelSearch (term, limit = 8) {
+  return rows(`${SKOS}
     SELECT ?g ?c ?label WHERE {
       GRAPH ?g { ?c skos:prefLabel ?label }
       FILTER(CONTAINS(LCASE(STR(?label)), LCASE(${literal(term)})))
@@ -102,8 +109,8 @@ export function labelSearch (store, term, limit = 8) {
 }
 
 /** Which graphs mention `term` in a prefLabel, and how often. */
-export function graphCounts (store, term, limit = 10) {
-  return rows(store, `${SKOS}
+export function graphCounts (term, limit = 10) {
+  return rows(`${SKOS}
     SELECT ?g (COUNT(*) AS ?n) WHERE {
       GRAPH ?g { ?c skos:prefLabel ?label }
       FILTER(CONTAINS(LCASE(STR(?label)), LCASE(${literal(term)})))
@@ -115,8 +122,8 @@ export function graphCounts (store, term, limit = 10) {
  * declares an exactMatch to, defined in another. The answer depends on
  * which graph each statement is in, so a triple store cannot express it.
  */
-export function crossGraphMatches (store, term, limit = 8) {
-  return rows(store, `${SKOS}${RDFS}
+export function crossGraphMatches (term, limit = 8) {
+  return rows(`${SKOS}${RDFS}
     SELECT ?from ?c ?label ?to ?target ?targetLabel WHERE {
       GRAPH ?from { ?c skos:prefLabel ?label ; skos:exactMatch ?target }
       GRAPH ?to   { ?target rdfs:label ?targetLabel }
@@ -126,19 +133,28 @@ export function crossGraphMatches (store, term, limit = 8) {
 }
 
 /** How many graphs and prefLabels the store holds. */
-export async function summary (store) {
-  const [row] = await rows(store, `${SKOS}
+export function summary () {
+  const [row] = rows(`${SKOS}
     SELECT (COUNT(DISTINCT ?g) AS ?graphs) (COUNT(*) AS ?labels)
     WHERE { GRAPH ?g { ?c skos:prefLabel ?label } }`)
   return row ?? { graphs: '0', labels: '0' }
 }
 
-// Run directly for a smoke check:  node skos-query.mjs <store> <word>
+// Smoke check:  node skos-query.mjs <store> <word>
 if (import.meta.url === `file://${process.argv[1]}`) {
   const store = process.argv[2] ?? '/Users/danbri/working/factoidal-skosgraphs'
   const term = process.argv[3] ?? 'water'
-  console.log(await summary(store))
-  for (const r of await labelSearch(store, term, 5)) {
-    console.log(`${r.g.split('/').pop()}  "${r.label}"  ${r.c}`)
+  let t = Date.now()
+  await open(store)
+  console.log(`open ${Date.now() - t} ms (once)`)
+  for (const w of [term, 'forest', 'bicycle']) {
+    t = Date.now()
+    const found = labelSearch(w, 3)
+    console.log(`"${w}" ${Date.now() - t} ms, ${found.length} rows`)
   }
+  t = Date.now()
+  const mapped = crossGraphMatches('building', 3)
+  console.log(`map "building" ${Date.now() - t} ms, ${mapped.length} rows`)
+  console.log(mapped)
+  close()
 }
