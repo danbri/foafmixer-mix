@@ -124,7 +124,9 @@ class XmppStream {
       `<stream:stream to='${domain}' version='1.0' xmlns='jabber:client' `
       + "xmlns:stream='http://etherx.jabber.org/streams'>",
     );
-    await this.receiveUntil('</stream:features>');
+    // 10s default elsewhere is too tight when the server itself is
+    // CPU-starved by unrelated concurrent work.
+    await this.receiveUntil('</stream:features>', { timeout: 30000 });
   }
 
   close() {
@@ -224,7 +226,7 @@ async function main() {
   await stream.open(domain);
   const plain = Buffer.from(`\x00${user}\x00${password}`, 'utf-8').toString('base64');
   stream.send(`<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>${plain}</auth>`);
-  const authResult = await stream.receiveUntil('success');
+  const authResult = await stream.receiveUntil('success', { timeout: 30000 });
   if (!authResult.includes('<success')) {
     throw new Error('SASL PLAIN did not succeed -- check the password');
   }
@@ -232,7 +234,8 @@ async function main() {
   const bound = await stream.iq(
     'bind',
     "<iq type='set' id='bind'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
-    + "<resource>skosbot-bridge</resource></bind></iq>",
+    + `<resource>skosbot-bridge-${CHANNEL_NAME}</resource></bind></iq>`,
+    { timeout: 30000 },
   );
   if (!bound.includes("type='result'") && !bound.includes('type="result"')) {
     throw new Error(`resource bind failed: ${bound}`);
@@ -248,7 +251,7 @@ async function main() {
     + "<subscribe node='urn:xmpp:mix:nodes:messages'/>"
     + "<subscribe node='urn:xmpp:mix:nodes:participants'/>"
     + '</join></client-join></iq>',
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
   if (!join.includes("type='result'") && !join.includes('type="result"')) {
     throw new Error(`client-join failed: ${join}`);
@@ -268,6 +271,19 @@ async function main() {
   let replyTimes = [];
   const RATE_LIMIT_COUNT = 5;
   const RATE_LIMIT_WINDOW = 30000;
+
+  // Queries are fast enough now (~150-500ms) not to need serializing, but
+  // a light cache still helps popular repeated terms skip that cost
+  // entirely. Bounded and FIFO-evicted -- not trying to be a real LRU.
+  const CACHE_MAX = 200;
+  const queryCache = new Map();
+  function cachedReply(key, compute) {
+    if (queryCache.has(key)) return queryCache.get(key);
+    const reply = compute();
+    queryCache.set(key, reply);
+    if (queryCache.size > CACHE_MAX) queryCache.delete(queryCache.keys().next().value);
+    return reply;
+  }
 
   const bootstrapMarkerRe = /^__talkie_bootstrap_[0-9a-f]+__$/;
   const bootstrapMarker = `__talkie_bootstrap_${randomUUID().replace(/-/g, '')}__`;
@@ -348,9 +364,10 @@ async function main() {
         }
 
         const query = (stripPrefixRe.test(body) ? body.replace(stripPrefixRe, '') : body).trim();
+        const cacheKey = (query || body).toLowerCase();
         let reply;
         try {
-          reply = skosReply(query || body);
+          reply = cachedReply(cacheKey, () => skosReply(query || body));
         } catch (exc) {
           console.error(`[skosbot] query error: ${exc.message}`);
           reply = `query failed: ${exc.message.split('\n')[0]}`;

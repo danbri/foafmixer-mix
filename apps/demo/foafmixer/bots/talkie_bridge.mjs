@@ -173,7 +173,9 @@ class XmppStream {
       `<stream:stream to='${domain}' version='1.0' xmlns='jabber:client' `
       + "xmlns:stream='http://etherx.jabber.org/streams'>",
     );
-    await this.receiveUntil('</stream:features>');
+    // 10s default elsewhere is too tight when the server itself is
+    // CPU-starved by unrelated concurrent work.
+    await this.receiveUntil('</stream:features>', { timeout: 30000 });
   }
 
   close() {
@@ -257,7 +259,7 @@ async function main() {
   await stream.open(domain);
   const plain = Buffer.from(`\x00${user}\x00${password}`, 'utf-8').toString('base64');
   stream.send(`<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>${plain}</auth>`);
-  const authResult = await stream.receiveUntil('success');
+  const authResult = await stream.receiveUntil('success', { timeout: 30000 });
   if (!authResult.includes('<success')) {
     throw new Error('SASL PLAIN did not succeed -- check the password');
   }
@@ -266,6 +268,7 @@ async function main() {
     'bind',
     "<iq type='set' id='bind'><bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
     + "<resource>talkie-bridge</resource></bind></iq>",
+    { timeout: 30000 },
   );
   if (!bound.includes("type='result'") && !bound.includes('type="result"')) {
     throw new Error(`resource bind failed: ${bound}`);
@@ -281,7 +284,7 @@ async function main() {
     + "<subscribe node='urn:xmpp:mix:nodes:messages'/>"
     + "<subscribe node='urn:xmpp:mix:nodes:participants'/>"
     + '</join></client-join></iq>',
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
   if (!join.includes("type='result'") && !join.includes('type="result"')) {
     throw new Error(`client-join failed: ${join}`);
