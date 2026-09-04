@@ -1,0 +1,9 @@
+{
+  "name": "talkie-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@factoidal/core": "^0.4.0"
+  }
+}

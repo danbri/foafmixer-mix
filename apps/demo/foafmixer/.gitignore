@@ -1,3 +1,9 @@
 .foafmixer-account-responsibility.tsv
 .foafmixer-generated/
 .foafmixer-ui/
+
+# bots/: GGUF model weights and npm deps are large/regeneratable, never
+# committed. Logs are runtime output.
+bots/models/
+bots/node_modules/
+bots/*.log
