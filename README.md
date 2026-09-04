@@ -23,6 +23,7 @@ side. See the patch repository's README for the per-patch gate state.
 ```
 apps/demo/foafmixer/   pilot.sh, ui.sh, human-account.sh, ejabberd.yml, web/
 docs/pilot-runbook.md  endpoints, client settings, dated test log
+docs/embedding.md      embedding the MIX client in another web app
 skills/xmpp-mix-engineering/  MIX protocol, patching and pilot references
 ```
 

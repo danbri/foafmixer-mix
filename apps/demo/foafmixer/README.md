@@ -66,7 +66,9 @@ Funnel, or production credentials without a separate deployment review.
 `ui.sh` serves a same-origin Strophe browser client, written as vanilla web
 components with no build step (see `web/` and
 [the redesign specification](../../../docs/ux-redesign.md)), privately over
-Tailscale HTTPS. It connects to ejabberd using XMPP-over-WebSocket and has no
+Tailscale HTTPS. The MIX protocol layer (`web/js/xmpp.js`) has no UI
+dependency and can be embedded standalone in another web app; see
+[docs/embedding.md](../../../docs/embedding.md). It connects to ejabberd using XMPP-over-WebSocket and has no
 server-side credential store: each human or accountable bot signs in with its
 own JID and password.
 
