@@ -145,6 +145,40 @@ function vocabularyOf(graphIri) {
   return cut < 0 ? trimmed : trimmed.slice(cut + 1);
 }
 
+// Off by default -- a chat reply reads as a paragraph, not a list with a
+// dangling IRI under every line. Set SKOS_SHOW_URLS=1 to get IRIs back.
+const SHOW_URLS = ['1', 'true'].includes(process.env.SKOS_SHOW_URLS || '');
+
+/** "a", "a and b", or "a, b and c" -- natural joining for a prose list. */
+function joinWithAnd(items) {
+  if (items.length <= 1) return items.join('');
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/** Every label-search row folded into one flowing paragraph, grouped by
+ *  vocabulary, using only the properties the store actually gave us
+ *  (vocabulary + label [+ IRI, opt-in]) -- no bare link dump. */
+function describeLabelMatches(rows) {
+  const byVocab = new Map();
+  for (const r of rows) {
+    const vocab = vocabularyOf(r.g);
+    const item = SHOW_URLS ? `"${r.label}" (${r.c})` : `"${r.label}"`;
+    if (!byVocab.has(vocab)) byVocab.set(vocab, []);
+    byVocab.get(vocab).push(item);
+  }
+  const clauses = [...byVocab.entries()].map(([vocab, labels]) => `${joinWithAnd(labels)} in ${vocab}`);
+  return `Found ${joinWithAnd(clauses)}.`;
+}
+
+/** Every cross-vocabulary match folded into sentences, same reasoning. */
+function describeCrossMatches(rows) {
+  return rows.map((r) => {
+    const link = SHOW_URLS ? ` (${r.target})` : '';
+    return `"${r.label}" in ${vocabularyOf(r.from)} is an exact match to "${r.targetLabel}" in ${vocabularyOf(r.to)}${link}.`;
+  }).join(' ');
+}
+
 const HELP = [
   'skosbot -- SKOS concepts from the factoidal-skosgraphs store.',
   '  <word>            concepts whose prefLabel contains <word>',
@@ -166,21 +200,19 @@ function skosReply(rawText) {
   if (vocabsMatch) {
     const rows = graphCounts(vocabsMatch[1], MAX_ROWS);
     if (rows.length === 0) return `no vocabulary mentions "${vocabsMatch[1]}"`;
-    return rows.map((r) => `${vocabularyOf(r.g)}: ${r.n}`).join('\n');
+    return `${joinWithAnd(rows.map((r) => `${vocabularyOf(r.g)} (${r.n})`))} mention "${vocabsMatch[1]}".`;
   }
 
   const mapMatch = /^map\s+(.+)$/i.exec(text);
   if (mapMatch) {
     const rows = crossGraphMatches(mapMatch[1], MAX_ROWS);
     if (rows.length === 0) return `no cross-vocabulary match for "${mapMatch[1]}"`;
-    return rows
-      .map((r) => `"${r.label}" (${vocabularyOf(r.from)}) → "${r.targetLabel}" [${vocabularyOf(r.to)}]\n  ${r.target}`)
-      .join('\n');
+    return describeCrossMatches(rows);
   }
 
   const rows = labelSearch(text, MAX_ROWS);
   if (rows.length === 0) return `nothing found for "${text}"`;
-  return rows.map((r) => `${vocabularyOf(r.g)}: "${r.label}"\n  ${r.c}`).join('\n');
+  return describeLabelMatches(rows);
 }
 
 function loadKnownBotJids(bareJid) {
