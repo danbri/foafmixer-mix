@@ -145,10 +145,6 @@ function vocabularyOf(graphIri) {
   return cut < 0 ? trimmed : trimmed.slice(cut + 1);
 }
 
-// Off by default -- a chat reply reads as a paragraph, not a list with a
-// dangling IRI under every line. Set SKOS_SHOW_URLS=1 to get IRIs back.
-const SHOW_URLS = ['1', 'true'].includes(process.env.SKOS_SHOW_URLS || '');
-
 /** "a", "a and b", or "a, b and c" -- natural joining for a prose list. */
 function joinWithAnd(items) {
   if (items.length <= 1) return items.join('');
@@ -156,27 +152,54 @@ function joinWithAnd(items) {
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-/** Every label-search row folded into one flowing paragraph, grouped by
- *  vocabulary, using only the properties the store actually gave us
- *  (vocabulary + label [+ IRI, opt-in]) -- no bare link dump. */
-function describeLabelMatches(rows) {
+/**
+ * Every label-search row folded into one flowing paragraph, grouped by
+ * vocabulary, using only the properties the store actually gave us
+ * (vocabulary + label) -- no bare link dump. Each concept gets a [N]
+ * marker and a full record (including its IRI) stashed in `citations`,
+ * keyed by that number as a string, so a later bare "[N]" from this
+ * channel can pull up the detailed version. Clears and renumbers from 1
+ * each time a new list is produced.
+ */
+function describeLabelMatches(rows, citations) {
+  citations.clear();
   const byVocab = new Map();
   for (const r of rows) {
     const vocab = vocabularyOf(r.g);
-    const item = SHOW_URLS ? `"${r.label}" (${r.c})` : `"${r.label}"`;
+    const n = citations.size + 1;
+    citations.set(String(n), { type: 'concept', label: r.label, vocabulary: vocab, iri: r.c });
     if (!byVocab.has(vocab)) byVocab.set(vocab, []);
-    byVocab.get(vocab).push(item);
+    byVocab.get(vocab).push(`"${r.label}" [${n}]`);
   }
   const clauses = [...byVocab.entries()].map(([vocab, labels]) => `${joinWithAnd(labels)} in ${vocab}`);
   return `Found ${joinWithAnd(clauses)}.`;
 }
 
-/** Every cross-vocabulary match folded into sentences, same reasoning. */
-function describeCrossMatches(rows) {
+/** Same reasoning, for cross-vocabulary matches: one [N] per match pair. */
+function describeCrossMatches(rows, citations) {
+  citations.clear();
   return rows.map((r) => {
-    const link = SHOW_URLS ? ` (${r.target})` : '';
-    return `"${r.label}" in ${vocabularyOf(r.from)} is an exact match to "${r.targetLabel}" in ${vocabularyOf(r.to)}${link}.`;
+    const n = citations.size + 1;
+    citations.set(String(n), {
+      type: 'match',
+      label: r.label, vocabulary: vocabularyOf(r.from), iri: r.c,
+      targetLabel: r.targetLabel, targetVocabulary: vocabularyOf(r.to), targetIri: r.target,
+    });
+    return `"${r.label}" in ${vocabularyOf(r.from)} is an exact match to "${r.targetLabel}" in ${vocabularyOf(r.to)} [${n}].`;
   }).join(' ');
+}
+
+/** The detailed, URL-bearing version of one earlier [N] citation. */
+function citationDetail(n, citations) {
+  const rec = citations.get(n);
+  if (!rec) return null;
+  if (rec.type === 'concept') {
+    return `[${n}] "${rec.label}" -- a concept in the ${rec.vocabulary} vocabulary.\n  ${rec.iri}`;
+  }
+  return (
+    `[${n}] "${rec.label}" (${rec.vocabulary}) is declared skos:exactMatch to "${rec.targetLabel}" (${rec.targetVocabulary}).\n`
+    + `  ${rec.iri}\n  skos:exactMatch\n  ${rec.targetIri}`
+  );
 }
 
 const HELP = [
@@ -184,12 +207,20 @@ const HELP = [
   '  <word>            concepts whose prefLabel contains <word>',
   '  vocabs <word>     which vocabularies mention it, and how often',
   '  map <word>        cross-vocabulary exactMatch links',
+  '  [N]               the detailed record (with URL) for [N] in the last reply',
   '  about             what this store holds',
   '  help              this text',
 ].join('\n');
 
-function skosReply(rawText) {
+function skosReply(rawText, citations) {
   const text = rawText.trim();
+
+  const citeMatch = /^\[?(\d+)\]?\.?$/.exec(text);
+  if (citeMatch) {
+    return citationDetail(citeMatch[1], citations)
+      ?? `no citation [${citeMatch[1]}] from my last reply here -- ask me something first`;
+  }
+
   if (/^help$/i.test(text)) return HELP;
   if (/^about$/i.test(text)) {
     const { graphs, labels } = summary();
@@ -207,12 +238,12 @@ function skosReply(rawText) {
   if (mapMatch) {
     const rows = crossGraphMatches(mapMatch[1], MAX_ROWS);
     if (rows.length === 0) return `no cross-vocabulary match for "${mapMatch[1]}"`;
-    return describeCrossMatches(rows);
+    return describeCrossMatches(rows, citations);
   }
 
   const rows = labelSearch(text, MAX_ROWS);
   if (rows.length === 0) return `nothing found for "${text}"`;
-  return describeLabelMatches(rows);
+  return describeLabelMatches(rows, citations);
 }
 
 function loadKnownBotJids(bareJid) {
@@ -307,6 +338,9 @@ async function main() {
   // Queries are fast enough now (~150-500ms) not to need serializing, but
   // a light cache still helps popular repeated terms skip that cost
   // entirely. Bounded and FIFO-evicted -- not trying to be a real LRU.
+  // Only used for help/about/vocabs: a cache hit for a search or map
+  // query would skip the citations-map side effect below, so those two
+  // always run fresh -- they're already fast enough not to need it.
   const CACHE_MAX = 200;
   const queryCache = new Map();
   function cachedReply(key, compute) {
@@ -316,6 +350,13 @@ async function main() {
     if (queryCache.size > CACHE_MAX) queryCache.delete(queryCache.keys().next().value);
     return reply;
   }
+
+  // What [N] in the bot's last search/map reply on THIS channel referred
+  // to, so a later bare "[N]" can pull up the full record (with URL).
+  // Cleared and renumbered from 1 by describeLabelMatches/describeCrossMatches
+  // each time a new list is produced; untouched by help/about/vocabs, so an
+  // older citation still resolves even after one of those runs in between.
+  const citations = new Map();
 
   const bootstrapMarkerRe = /^__talkie_bootstrap_[0-9a-f]+__$/;
   const bootstrapMarker = `__talkie_bootstrap_${randomUUID().replace(/-/g, '')}__`;
@@ -397,9 +438,15 @@ async function main() {
 
         const query = (stripPrefixRe.test(body) ? body.replace(stripPrefixRe, '') : body).trim();
         const cacheKey = (query || body).toLowerCase();
+        // help/about/vocabs don't touch `citations`, so caching them is
+        // safe; a citation reference or a fresh search/map must always run
+        // for real, or citations would go stale behind a cached reply.
+        const cacheable = /^(help|about|vocabs\s+.+)$/i.test(cacheKey);
         let reply;
         try {
-          reply = cachedReply(cacheKey, () => skosReply(query || body));
+          reply = cacheable
+            ? cachedReply(cacheKey, () => skosReply(query || body, citations))
+            : skosReply(query || body, citations);
         } catch (exc) {
           console.error(`[skosbot] query error: ${exc.message}`);
           reply = `query failed: ${exc.message.split('\n')[0]}`;
